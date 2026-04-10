@@ -34,6 +34,16 @@ jobs:
       # On pointe explicitement vers le pom.xml du module simple-api
       - name: Build and test with Maven
         run: mvn clean verify --file ./simple-api/pom.xml
+
+              # Lance l'analyse SonarQube Cloud sur le projet Maven
+      - name: Analyze with SonarQube Cloud
+        run: >
+          mvn -B verify sonar:sonar
+          -Dsonar.projectKey=TON_PROJECT_KEY
+          -Dsonar.organization=TON_ORGANIZATION_KEY
+          -Dsonar.host.url=https://sonarcloud.io
+          -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+          --file ./simple-api/pom.xml
         
   build-and-push-docker-image:
     # Ce job ne démarre que si les tests backend ont réussi
