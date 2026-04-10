@@ -1,0 +1,36 @@
+name: CI devops 2025
+
+on:
+  # Lance le workflow à chaque push sur les branches main et develop
+  push:
+    branches:
+      - main
+      - develop
+
+  # Lance aussi le workflow lors des pull requests
+  pull_request:
+
+jobs:
+  test-backend:
+    # Le job s’exécute sur un runner GitHub hébergé sous Ubuntu 24.04
+    runs-on: ubuntu-24.04
+
+    steps:
+      # Récupère le code du dépôt dans le runner
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Installe Java 21 dans le runner
+      # "temurin" est une distribution Java supportée par setup-java
+      # Le cache Maven accélère les exécutions suivantes
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # Compile le projet et exécute les tests Maven
+      # On pointe explicitement vers le pom.xml du module simple-api
+      - name: Build and test with Maven
+        run: mvn clean verify --file ./simple-api/pom.xml
