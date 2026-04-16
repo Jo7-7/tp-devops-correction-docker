@@ -1,30 +1,85 @@
-# Nom affiché du workflow dans GitHub Actions
+# Nom affiché du workflow dans l'onglet Actions de GitHub
 name: CI devops 2025
 
+# Événements qui déclenchent automatiquement le workflow
 on:
-  # Lance le workflow à chaque push sur les branches main et develop
+  # Déclenche le workflow lors d'un push sur les branches main et develop
   push:
     branches:
       - main
       - develop
 
-  # Lance aussi le workflow lors des pull requests
+  # Déclenche aussi le workflow lors de la création ou mise à jour d'une pull request
   pull_request:
 
+# Liste des jobs du workflow
 jobs:
-  test-backend:
-    # Le job s’exécute sur un runner GitHub hébergé sous Ubuntu 24.04
+  # Premier job : vérification rapide de la structure du projet
+  check-project-structure:
+    # Exécute ce job sur une machine virtuelle Ubuntu fournie par GitHub
     runs-on: ubuntu-24.04
 
     steps:
-      # Récupère le code du dépôt avec tout l'historique
-      # fetch-depth: 0 est recommandé pour Sonar
+      # Récupère le contenu du dépôt dans le runner
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      # Vérifie que les fichiers indispensables existent bien
+      - name: Check required files
+        run: |
+          test -f ./simple-api/pom.xml
+          test -f ./simple-api/Dockerfile
+          test -f ./database/Dockerfile
+          test -f ./http-server/Dockerfile
+
+  # Deuxième job : compilation et tests du backend
+  test-backend:
+    # Ce job ne démarre que si la structure du projet est correcte
+    needs: check-project-structure
+
+    # Exécute ce job sur un runner Ubuntu
+    runs-on: ubuntu-24.04
+
+    steps:
+      # Récupère le code source du dépôt
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
+          # Récupère tout l'historique Git, utile pour certaines analyses comme Sonar
           fetch-depth: 0
 
-      # Installe Java 21
+      # Installe Java 21 dans le runner
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          # Distribution OpenJDK utilisée
+          distribution: temurin
+          # Version de Java installée
+          java-version: '21'
+          # Mise en cache des dépendances Maven pour accélérer les builds suivants
+          cache: maven
+
+      # Compile le projet et exécute les tests Maven
+      - name: Build and test with Maven
+        run: mvn -B clean verify --file ./simple-api/pom.xml
+
+  # Troisième job : analyse qualité avec SonarQube Cloud
+  sonar-analysis:
+    # Ce job attend que les tests backend soient validés
+    needs: test-backend
+
+    # Exécute ce job sur un runner Ubuntu
+    runs-on: ubuntu-24.04
+
+    steps:
+      # Récupère le dépôt dans le runner
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          # Historique complet recommandé pour SonarQube Cloud
+          fetch-depth: 0
+
+      # Réinstalle Java 21 sur ce runner
       - name: Set up JDK 21
         uses: actions/setup-java@v5
         with:
@@ -32,60 +87,117 @@ jobs:
           java-version: '21'
           cache: maven
 
-      # Compile le projet et exécute les tests Maven
-      - name: Build and test with Maven
-        run: mvn clean verify --file ./simple-api/pom.xml
-
       # Lance l'analyse SonarQube Cloud
       - name: Analyze with SonarQube Cloud
         env:
+          # Injecte le token Sonar stocké dans les secrets GitHub
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: >
           mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
           -Dsonar.projectKey=Jo7-7_tp-devops-correction-docker
           -Dsonar.organization=efreitp-devops
-          -Dsonar.host.url=https://sonarcloud.io
           --file ./simple-api/pom.xml
-        
-  build-and-push-docker-image:
-    # Ce job ne démarre que si les tests backend ont réussi
-    needs: test-backend
 
-    # Le job s’exécute sur un runner GitHub hébergé sous Ubuntu 24.04
+  # Quatrième job : construction et publication de l'image Docker du backend
+  build-backend-image:
+    # Ce job attend que l'analyse Sonar soit réussie
+    needs: sonar-analysis
+
+    # Exécute ce job sur un runner Ubuntu
     runs-on: ubuntu-24.04
 
-    steps:
-      # Récupère le code du dépôt dans le runner
-      - name: Checkout code
-        uses: actions/checkout@v4
+    # Ce job ne s'exécute que sur la branche main
+    if: github.ref == 'refs/heads/main'
 
-      # Connexion à Docker Hub avec les secrets GitHub
+    steps:
+      # Récupère le dépôt dans le runner
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      # Authentifie le runner auprès de Docker Hub
+      - name: Login to DockerHub
+        uses: docker/login-action@v4
+        with:
+          # Nom d'utilisateur Docker Hub stocké dans les secrets GitHub
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          # Token Docker Hub stocké dans les secrets GitHub
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Construit et pousse l'image Docker du backend
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          # Dossier contenant le Dockerfile du backend
+          context: ./simple-api
+          # Nom de l'image publiée sur Docker Hub
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/tp-devops-simple-api:latest
+          # Publication effective sur Docker Hub
+          push: true
+
+  # Cinquième job : construction et publication de l'image Docker de la base de données
+  build-database-image:
+    # Ce job attend aussi que l'analyse Sonar soit réussie
+    needs: sonar-analysis
+
+    # Exécute ce job sur un runner Ubuntu
+    runs-on: ubuntu-24.04
+
+    # Ce job ne s'exécute que sur la branche main
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      # Récupère le dépôt dans le runner
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      # Authentifie le runner auprès de Docker Hub
       - name: Login to DockerHub
         uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Construit l'image du backend et la pousse sur Docker Hub seulement sur main
-      - name: Build image and push backend
+      # Construit et pousse l'image Docker de la base
+      - name: Build and push database image
         uses: docker/build-push-action@v6
         with:
-          context: ./simple-api
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/tp-devops-simple-api:latest
-          push: ${{ github.ref == 'refs/heads/main' }}
-
-      # Construit l'image de la base de données et la pousse sur Docker Hub seulement sur main
-      - name: Build image and push database
-        uses: docker/build-push-action@v6
-        with:
+          # Dossier contenant le Dockerfile de la base de données
           context: ./database
+          # Nom de l'image publiée sur Docker Hub
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/tp-devops-database:latest
-          push: ${{ github.ref == 'refs/heads/main' }}
+          # Publication effective sur Docker Hub
+          push: true
 
-      # Construit l'image du serveur HTTP et la pousse sur Docker Hub seulement sur main
-      - name: Build image and push http-server
+  # Sixième job : construction et publication de l'image Docker du serveur HTTP
+  build-http-server-image:
+    # Ce job attend aussi que l'analyse Sonar soit réussie
+    needs: sonar-analysis
+
+    # Exécute ce job sur un runner Ubuntu
+    runs-on: ubuntu-24.04
+
+    # Ce job ne s'exécute que sur la branche main
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      # Récupère le dépôt dans le runner
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      # Authentifie le runner auprès de Docker Hub
+      - name: Login to DockerHub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Construit et pousse l'image Docker du serveur HTTP
+      - name: Build and push http-server image
         uses: docker/build-push-action@v6
         with:
+          # Dossier contenant le Dockerfile du serveur HTTP
           context: ./http-server
+          # Nom de l'image publiée sur Docker Hub
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/tp-devops-http-server:latest
-          push: ${{ github.ref == 'refs/heads/main' }}
+          # Publication effective sur Docker Hub
+          push: true
