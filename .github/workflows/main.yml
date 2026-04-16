@@ -65,21 +65,15 @@ jobs:
 
   # Troisième job : analyse qualité avec SonarQube Cloud
   sonar-analysis:
-    # Ce job attend que les tests backend soient validés
     needs: test-backend
-
-    # Exécute ce job sur un runner Ubuntu
     runs-on: ubuntu-24.04
 
     steps:
-      # Récupère le dépôt dans le runner
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          # Historique complet recommandé pour SonarQube Cloud
           fetch-depth: 0
 
-      # Réinstalle Java 21 sur ce runner
       - name: Set up JDK 21
         uses: actions/setup-java@v5
         with:
@@ -87,13 +81,11 @@ jobs:
           java-version: '21'
           cache: maven
 
-      # Lance l'analyse SonarQube Cloud
-      - name: Analyze with SonarQube Cloud
+      - name: Build and analyze with SonarQube Cloud
         env:
-          # Injecte le token Sonar stocké dans les secrets GitHub
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: >
-          mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+          mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
           -Dsonar.projectKey=Jo7-7_tp-devops-correction-docker
           -Dsonar.organization=efreitp-devops
           --file ./simple-api/pom.xml
