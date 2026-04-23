@@ -3,28 +3,20 @@ name: CI devops 2025
 
 # Événements qui déclenchent automatiquement le workflow
 on:
-  # Déclenche le workflow lors d'un push sur les branches main et develop
   push:
     branches:
       - main
       - develop
-
-  # Déclenche aussi le workflow lors de la création ou mise à jour d'une pull request
   pull_request:
 
 # Liste des jobs du workflow
 jobs:
   # Premier job : vérification rapide de la structure du projet
   check-project-structure:
-    # Exécute ce job sur une machine virtuelle Ubuntu fournie par GitHub
     runs-on: ubuntu-24.04
-
     steps:
-      # Récupère le contenu du dépôt dans le runner
       - name: Checkout repository
         uses: actions/checkout@v5
-
-      # Vérifie que les fichiers indispensables existent bien
       - name: Check required files
         run: |
           test -f ./simple-api/pom.xml
@@ -34,32 +26,19 @@ jobs:
 
   # Deuxième job : compilation et tests du backend
   test-backend:
-    # Ce job ne démarre que si la structure du projet est correcte
     needs: check-project-structure
-
-    # Exécute ce job sur un runner Ubuntu
     runs-on: ubuntu-24.04
-
     steps:
-      # Récupère le code source du dépôt
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          # Récupère tout l'historique Git, utile pour certaines analyses comme Sonar
           fetch-depth: 0
-
-      # Installe Java 21 dans le runner
       - name: Set up JDK 21
         uses: actions/setup-java@v5
         with:
-          # Distribution OpenJDK utilisée
           distribution: temurin
-          # Version de Java installée
           java-version: '21'
-          # Mise en cache des dépendances Maven pour accélérer les builds suivants
           cache: maven
-
-      # Compile le projet et exécute les tests Maven
       - name: Build and test with Maven
         run: mvn -B clean verify --file ./simple-api/pom.xml
 
@@ -67,20 +46,17 @@ jobs:
   sonar-analysis:
     needs: test-backend
     runs-on: ubuntu-24.04
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
-
       - name: Set up JDK 21
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
           cache: maven
-
       - name: Build and analyze with SonarQube Cloud
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -90,148 +66,90 @@ jobs:
           -Dsonar.organization=efreitp-devops
           --file ./simple-api/pom.xml
 
-  # Quatrième job : construction et publication de l'image Docker du backend
+  # Quatrième job : image Docker du backend
   build-backend-image:
-    # Ce job attend que l'analyse Sonar soit réussie
     needs: sonar-analysis
-
-    # Exécute ce job sur un runner Ubuntu
     runs-on: ubuntu-24.04
-
-    # Ce job ne s'exécute que sur la branche main
     if: github.ref == 'refs/heads/main'
-
     steps:
-      # Récupère le dépôt dans le runner
       - name: Checkout repository
         uses: actions/checkout@v5
-
-      # Authentifie le runner auprès de Docker Hub
       - name: Login to DockerHub
         uses: docker/login-action@v4
         with:
-          # Nom d'utilisateur Docker Hub stocké dans les secrets GitHub
           username: ${{ secrets.DOCKERHUB_USERNAME }}
-          # Token Docker Hub stocké dans les secrets GitHub
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      # Construit et pousse l'image Docker du backend
       - name: Build and push backend image
         uses: docker/build-push-action@v6
         with:
-          # Dossier contenant le Dockerfile du backend
           context: ./simple-api
-          # Nom de l'image publiée sur Docker Hub
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/tp-devops-simple-api:latest
-          # Publication effective sur Docker Hub
           push: true
 
-  # Cinquième job : construction et publication de l'image Docker de la base de données
+  # Cinquième job : image Docker de la base de données
   build-database-image:
-    # Ce job attend aussi que l'analyse Sonar soit réussie
     needs: sonar-analysis
-
-    # Exécute ce job sur un runner Ubuntu
     runs-on: ubuntu-24.04
-
-    # Ce job ne s'exécute que sur la branche main
     if: github.ref == 'refs/heads/main'
-
     steps:
-      # Récupère le dépôt dans le runner
       - name: Checkout repository
         uses: actions/checkout@v5
-
-      # Authentifie le runner auprès de Docker Hub
       - name: Login to DockerHub
         uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      # Construit et pousse l'image Docker de la base
       - name: Build and push database image
         uses: docker/build-push-action@v6
         with:
-          # Dossier contenant le Dockerfile de la base de données
           context: ./database
-          # Nom de l'image publiée sur Docker Hub
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/tp-devops-database:latest
-          # Publication effective sur Docker Hub
           push: true
 
-  # Sixième job : construction et publication de l'image Docker du serveur HTTP
+  # Sixième job : image Docker du serveur HTTP
   build-http-server-image:
-    # Ce job attend aussi que l'analyse Sonar soit réussie
     needs: sonar-analysis
-
-    # Exécute ce job sur un runner Ubuntu
     runs-on: ubuntu-24.04
-
-    # Ce job ne s'exécute que sur la branche main
     if: github.ref == 'refs/heads/main'
-
     steps:
-      # Récupère le dépôt dans le runner
       - name: Checkout repository
         uses: actions/checkout@v5
-
-      # Authentifie le runner auprès de Docker Hub
       - name: Login to DockerHub
         uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      # Construit et pousse l'image Docker du serveur HTTP
       - name: Build and push http-server image
         uses: docker/build-push-action@v6
         with:
-          # Dossier contenant le Dockerfile du serveur HTTP
           context: ./http-server
-          # Nom de l'image publiée sur Docker Hub
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/tp-devops-http-server:latest
-          # Publication effective sur Docker Hub
           push: true
 
-  # Septième job : déploiement automatique sur le serveur via Ansible
-    deploy:
-      # Attend que les 3 images soient poussées sur DockerHub
-      needs:
-        - build-backend-image
-        - build-database-image
-        - build-http-server-image
-
-      runs-on: ubuntu-24.04
-
-      # Ne déploie que sur la branche main
-      if: github.ref == 'refs/heads/main'
-
-      environment: production
-
-      steps:
-        # Récupère le code (dont le dossier ansible/)
-        - name: Checkout repository
-          uses: actions/checkout@v5
-
-        # Installe Ansible + la collection community.docker sur le runner
-        - name: Install Ansible
-          run: |
-            sudo apt-get update
-            sudo apt-get install -y ansible
-            ansible-galaxy collection install community.docker
-
-        # Crée la clé SSH à partir du secret GitHub
-        - name: Setup SSH private key
-          run: |
-            mkdir -p ~/.ssh
-            echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-            chmod 400 ~/.ssh/id_rsa
-            # Ajoute l'empreinte du serveur aux known_hosts (évite le prompt "yes")
-            ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
-
-        # Lance le playbook Ansible
-        - name: Run Ansible playbook
-          run: |
-            cd ansible
-            ansible-playbook -i inventories/setup.yml playbook.yml --private-key=~/.ssh/id_rsa
+  # Septième job : déploiement sur le serveur via Ansible (manuel, protégé)
+  deploy:
+    needs:
+      - build-backend-image
+      - build-database-image
+      - build-http-server-image
+    runs-on: ubuntu-24.04
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Install Ansible
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ansible
+          ansible-galaxy collection install community.docker
+      - name: Setup SSH private key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 400 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+      - name: Run Ansible playbook
+        run: |
+          cd ansible
+          ansible-playbook -i inventories/setup.yml playbook.yml --private-key=~/.ssh/id_rsa
