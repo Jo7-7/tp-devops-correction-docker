@@ -47,7 +47,7 @@
 
 # Install Docker SDK for Python in the virtual environment
 - name: Install Docker SDK for Python in virtual environment
-  command: /opt/docker_venv/bin/pip install docker
+  command: /opt/docker_venv/bin/pip install "docker<7.0.0" "requests<2.32.0"
 
 # Ensure Docker is running
 - name: Make sure Docker is running

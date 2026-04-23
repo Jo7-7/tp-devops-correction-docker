@@ -1,0 +1,14 @@
+---
+- name: Launch app container
+  community.docker.docker_container:
+    name: simple-api
+    image: josuuk/tp-devops-simple-api:latest
+    networks:
+      - name: app-network
+    env:
+      DATABASE_HOST: "database"
+      DATABASE_PASSWORD: "pwd"
+    pull: true
+    restart_policy: unless-stopped
+  vars:
+    ansible_python_interpreter: /opt/docker_venv/bin/python
