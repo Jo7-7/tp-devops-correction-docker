@@ -194,44 +194,44 @@ jobs:
           # Publication effective sur Docker Hub
           push: true
 
-# Septième job : déploiement automatique sur le serveur via Ansible
-  deploy:
-    # Attend que les 3 images soient poussées sur DockerHub
-    needs:
-      - build-backend-image
-      - build-database-image
-      - build-http-server-image
+  # Septième job : déploiement automatique sur le serveur via Ansible
+    deploy:
+      # Attend que les 3 images soient poussées sur DockerHub
+      needs:
+        - build-backend-image
+        - build-database-image
+        - build-http-server-image
 
-    runs-on: ubuntu-24.04
+      runs-on: ubuntu-24.04
 
-    # Ne déploie que sur la branche main
-    if: github.ref == 'refs/heads/main'
+      # Ne déploie que sur la branche main
+      if: github.ref == 'refs/heads/main'
 
-    environment: production
+      environment: production
 
-    steps:
-      # Récupère le code (dont le dossier ansible/)
-      - name: Checkout repository
-        uses: actions/checkout@v5
+      steps:
+        # Récupère le code (dont le dossier ansible/)
+        - name: Checkout repository
+          uses: actions/checkout@v5
 
-      # Installe Ansible + la collection community.docker sur le runner
-      - name: Install Ansible
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ansible
-          ansible-galaxy collection install community.docker
+        # Installe Ansible + la collection community.docker sur le runner
+        - name: Install Ansible
+          run: |
+            sudo apt-get update
+            sudo apt-get install -y ansible
+            ansible-galaxy collection install community.docker
 
-      # Crée la clé SSH à partir du secret GitHub
-      - name: Setup SSH private key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 400 ~/.ssh/id_rsa
-          # Ajoute l'empreinte du serveur aux known_hosts (évite le prompt "yes")
-          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+        # Crée la clé SSH à partir du secret GitHub
+        - name: Setup SSH private key
+          run: |
+            mkdir -p ~/.ssh
+            echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+            chmod 400 ~/.ssh/id_rsa
+            # Ajoute l'empreinte du serveur aux known_hosts (évite le prompt "yes")
+            ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
-      # Lance le playbook Ansible
-      - name: Run Ansible playbook
-        run: |
-          cd ansible
-          ansible-playbook -i inventories/setup.yml playbook.yml --private-key=~/.ssh/id_rsa
+        # Lance le playbook Ansible
+        - name: Run Ansible playbook
+          run: |
+            cd ansible
+            ansible-playbook -i inventories/setup.yml playbook.yml --private-key=~/.ssh/id_rsa
