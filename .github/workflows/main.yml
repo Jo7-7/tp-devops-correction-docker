@@ -207,6 +207,8 @@ jobs:
     # Ne déploie que sur la branche main
     if: github.ref == 'refs/heads/main'
 
+    environment: production
+
     steps:
       # Récupère le code (dont le dossier ansible/)
       - name: Checkout repository
