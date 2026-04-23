@@ -1,7 +1,6 @@
 all:
   vars:
     ansible_user: admin
-    ansible_ssh_private_key_file: /home/codespace/.ssh/id_rsa
   children:
     prod:
       hosts: josue-kinsanh-nixxon.koffi.takima.school
