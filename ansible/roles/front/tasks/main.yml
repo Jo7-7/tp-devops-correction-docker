@@ -1,0 +1,11 @@
+---
+- name: Launch frontend container
+  community.docker.docker_container:
+    name: frontend
+    image: josuuk/tp-devops-frontend:latest
+    networks:
+      - name: app-network
+    pull: true
+    restart_policy: unless-stopped
+  vars:
+    ansible_python_interpreter: /opt/docker_venv/bin/python
