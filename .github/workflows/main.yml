@@ -172,6 +172,8 @@ jobs:
           chmod 400 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
       - name: Run Ansible playbook
-        run: |
-          cd ansible
-          ansible-playbook -i inventories/setup.yml playbook.yml --private-key=~/.ssh/id_rsa
+              run: |
+                cd ansible
+                echo "${{ secrets.VAULT_PASSWORD }}" > .vault_pass
+                chmod 600 .vault_pass
+                ansible-playbook -i inventories/setup.yml playbook.yml --private-key=~/.ssh/id_rsa --vault-password-file .vault_pass

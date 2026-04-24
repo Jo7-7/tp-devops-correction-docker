@@ -6,7 +6,7 @@
     networks:
       - name: app-network
     env:
-      POSTGRES_PASSWORD: "pwd"
+      POSTGRES_PASSWORD: "{{ database_password }}"
     volumes:
       - db-volume:/var/lib/postgresql/data
     pull: true
